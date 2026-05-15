@@ -1,23 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_, between
 from typing import Optional, List
 from datetime import datetime
 
 from ..database import get_db
 from ..models import User, Booking
 from ..schemas import BookingCreate, BookingUpdate, BookingResponse
-from ..auth import get_current_active_user
+from ..auth import get_current_user, get_current_manager
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
+security = HTTPBearer()
 
 @router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 def create_booking(
     booking_data: BookingCreate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Создание нового бронирования"""
+    current_user = get_current_user(credentials, db)
     
     if booking_data.check_in_date >= booking_data.check_out_date:
         raise HTTPException(
@@ -47,11 +49,12 @@ def get_bookings(
     max_price: Optional[float] = Query(None, ge=0, description="Максимальная цена"),
     check_in_from: Optional[datetime] = Query(None, description="Дата заезда от"),
     check_in_to: Optional[datetime] = Query(None, description="Дата заезда до"),
-    status: Optional[str] = Query(None, description="Статус бронирования"),
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    status_filter: Optional[str] = Query(None, description="Статус бронирования"),
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Получение списка бронирований текущего пользователя с пагинацией и фильтрацией"""
+    current_user = get_current_user(credentials, db)
     
     query = db.query(Booking).filter(Booking.user_id == current_user.id)
     
@@ -70,8 +73,8 @@ def get_bookings(
     if check_in_to:
         query = query.filter(Booking.check_in_date <= check_in_to)
     
-    if status:
-        query = query.filter(Booking.status == status)
+    if status_filter:
+        query = query.filter(Booking.status == status_filter)
     
     bookings = query.order_by(Booking.created_at.desc()).offset(skip).limit(limit).all()
     
@@ -80,10 +83,11 @@ def get_bookings(
 @router.get("/{booking_id}", response_model=BookingResponse)
 def get_booking(
     booking_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Получение деталей конкретного бронирования"""
+    current_user = get_current_user(credentials, db)
     
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
@@ -105,10 +109,11 @@ def get_booking(
 def update_booking(
     booking_id: int,
     booking_data: BookingUpdate,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Обновление бронирования"""
+    current_user = get_current_user(credentials, db)
     
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
@@ -143,10 +148,11 @@ def update_booking(
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_booking(
     booking_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Удаление бронирования"""
+    current_user = get_current_user(credentials, db)
     
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
@@ -174,10 +180,11 @@ def delete_booking(
 @router.post("/{booking_id}/confirm")
 def confirm_booking(
     booking_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Подтверждение бронирования пользователем"""
+    current_user = get_current_user(credentials, db)
     
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
@@ -208,10 +215,11 @@ def confirm_booking(
 @router.post("/{booking_id}/cancel")
 def cancel_booking(
     booking_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Отмена бронирования"""
+    current_user = get_current_user(credentials, db)
     
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from datetime import timedelta
 from jose import JWTError, jwt
 
 from ..database import get_db
@@ -11,11 +11,12 @@ from ..schemas import (
 )
 from ..auth import (
     get_password_hash, authenticate_user, create_access_token,
-    create_refresh_token, get_current_user, get_current_active_user
+    create_refresh_token, get_current_user
 )
 from ..config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+security = HTTPBearer()
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -106,11 +107,13 @@ def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
 @router.post("/change-password")
 def change_password(
     password_data: ChangePassword,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Смена пароля текущего пользователя"""
     from ..auth import verify_password
+    
+    current_user = get_current_user(credentials, db)
     
     if not verify_password(password_data.old_password, current_user.hashed_password):
         raise HTTPException(
@@ -118,13 +121,16 @@ def change_password(
             detail="Incorrect old password"
         )
     
-    from ..auth import get_password_hash
     current_user.hashed_password = get_password_hash(password_data.new_password)
     db.commit()
     
     return {"message": "Password changed successfully"}
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_active_user)):
+def get_me(
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     """Получение информации о текущем пользователе"""
+    current_user = get_current_user(credentials, db)
     return current_user

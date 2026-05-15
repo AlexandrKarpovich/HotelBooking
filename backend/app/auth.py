@@ -3,15 +3,13 @@ from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials
 from .config import settings
 from .models import User
 from .schemas import TokenData
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-security = HTTPBearer()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверка пароля"""
@@ -47,55 +45,54 @@ def create_refresh_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
-def get_current_user(token: str = Depends(security), db: Session = Depends(lambda: None)) -> User:
+def get_current_user(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
     """Получение текущего пользователя по токену"""
-    from .database import get_db
-    db = next(get_db())
-    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token.credentials, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            credentials.credentials, 
+            settings.secret_key, 
+            algorithms=[settings.algorithm]
+        )
         username: str = payload.get("sub")
         token_type: str = payload.get("type")
         if username is None or token_type != "access":
             raise credentials_exception
-        token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.username == token_data.username).first()
+    user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
     return user
 
-def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+def get_current_active_user(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
     """Получение активного пользователя"""
-    if not current_user.is_active:
+    user = get_current_user(credentials, db)
+    if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
+    return user
 
-def get_current_manager(current_user: User = Depends(get_current_active_user)) -> User:
+def get_current_manager(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
     """Проверка прав менеджера"""
-    if current_user.role not in ["manager", "admin"]:
+    user = get_current_active_user(credentials, db)
+    if user.role not in ["manager", "admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    return current_user
+    return user
 
-def get_current_admin(current_user: User = Depends(get_current_active_user)) -> User:
+def get_current_admin(credentials: HTTPAuthorizationCredentials, db: Session) -> User:
     """Проверка прав администратора"""
-    if current_user.role != "admin":
+    user = get_current_active_user(credentials, db)
+    if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin rights required"
         )
-    return current_user
-
-async def get_token_from_header(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    """Извлечение токена из заголовка"""
-    return credentials.credentials
+    return user
