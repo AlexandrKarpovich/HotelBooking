@@ -1,10 +1,7 @@
 from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from app.database import engine, Base, get_db
-from app import models
-
-Base.metadata.create_all(bind=engine)
+from app.database import get_db
 
 app = FastAPI(
     title="Hotel Booking API",
