@@ -44,6 +44,7 @@ class Booking(Base):
     
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user = relationship("User", back_populates="bookings")
+    views = relationship("UserView", back_populates="booking", cascade="all, delete-orphan")
 
 class UserView(Base):
     __tablename__ = "user_views"
@@ -55,4 +56,4 @@ class UserView(Base):
     viewed_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="views")
-    booking = relationship("Booking")
+    booking = relationship("Booking", back_populates="views")

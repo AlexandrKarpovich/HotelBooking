@@ -12,6 +12,26 @@ from ..auth import get_current_user, get_current_manager
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 security = HTTPBearer()
 
+@router.get("/recommendations", response_model=List[dict])
+def get_recommendations(
+    limit: int = Query(5, ge=1, le=20, description="Количество рекомендаций"),
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Получение персональных рекомендаций на основе просмотров"""
+    from ..utils import RecommendationEngine
+    
+    current_user = get_current_user(credentials, db)
+    
+    recommender = RecommendationEngine(db)
+    recommendations = recommender.get_recommendations_for_user(
+        current_user.id, 
+        limit=limit
+    )
+    
+    return recommendations
+
+
 @router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 def create_booking(
     booking_data: BookingCreate,
@@ -79,6 +99,53 @@ def get_bookings(
     bookings = query.order_by(Booking.created_at.desc()).offset(skip).limit(limit).all()
     
     return bookings
+
+@router.post("/{booking_id}/view")
+def track_booking_view(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Трекинг просмотра бронирования (для рекомендаций)"""
+    from ..utils import RecommendationEngine
+    
+    current_user = get_current_user(credentials, db)
+    
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+    
+    recommender = RecommendationEngine(db)
+    recommender.track_view(current_user.id, booking_id)
+    
+    return {"message": "View tracked successfully"}
+
+@router.get("/{booking_id}/similar", response_model=List[dict])
+def get_similar_bookings(
+    booking_id: int,
+    limit: int = Query(5, ge=1, le=20, description="Количество похожих предложений"),
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Получение похожих бронирований (альтернативы)"""
+    from ..utils import RecommendationEngine
+    
+    current_user = get_current_user(credentials, db)
+    
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+    
+    recommender = RecommendationEngine(db)
+    similar = recommender.get_similar_bookings(booking_id, limit=limit)
+    
+    return similar
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 def get_booking(
