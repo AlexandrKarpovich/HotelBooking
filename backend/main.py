@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -8,6 +9,20 @@ app = FastAPI(
     title="Hotel Booking API",
     description="Система управления бронированием отелей",
     version="1.0.0"
+)
+
+# Настройка CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",      # React frontend
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",      # Vite default
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],               # Разрешить все методы (GET, POST, PUT, DELETE и т.д.)
+    allow_headers=["*"],               # Разрешить все заголовки
 )
 
 app.include_router(auth_router)

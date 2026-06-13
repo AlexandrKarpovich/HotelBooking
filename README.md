@@ -177,3 +177,38 @@ docker compose restart
 ```bash
 docker compose down -v
 ```
+Пересобрать без использования кэша
+```bash
+docker compose build --no-cache
+```
+Запустить
+```bash
+docker compose up -d
+```
+
+📁 Структура проекта
+```
+hotel-booking/
+├── backend/
+└── frontend/
+    ├── public/
+    ├── src/
+    │   ├── components/
+    │   │   ├── Layout/
+    │   │   ├── Auth/
+    │   │   ├── Bookings/
+    │   │   ├── Admin/
+    │   │   └── Common/
+    │   ├── services/
+    │   ├── contexts/
+    │   ├── hooks/
+    │   ├── utils/
+    │   └── App.js
+    ├── package.json
+    └── Dockerfile
+```
+
+
+фронт нужно отдельно запускать 
+cd frontend
+npm run dev
